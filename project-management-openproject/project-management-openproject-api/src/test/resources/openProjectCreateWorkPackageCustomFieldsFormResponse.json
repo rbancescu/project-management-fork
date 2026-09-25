@@ -1,0 +1,103 @@
+{
+  "_type": "Form",
+  "_embedded": {
+    "payload": {
+      "subject": "subject",
+      "customField1": null,
+      "customField2": {
+        "raw": ""
+      },
+      "_links": {
+        "project": {
+          "href": "/api/v3/projects/1"
+        },
+        "type": {
+          "href": "/api/v3/types/1",
+          "title": "Task"
+        },
+        "customField3": {
+          "href": null
+        },
+        "customField4": []
+      }
+    },
+    "schema": {
+      "subject": {
+        "type": "String",
+        "name": "Subject",
+        "required": true,
+        "writable": true
+      },
+      "customField1": {
+        "type": "String",
+        "name": "Customer",
+        "required": true,
+        "writable": true
+      },
+      "customField2": {
+        "type": "Formattable",
+        "name": "Notes",
+        "required": false,
+        "writable": true
+      },
+      "customField3": {
+        "type": "CustomOption",
+        "name": "Severity",
+        "required": false,
+        "writable": true,
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "CustomOption",
+              "id": 7,
+              "value": "High",
+              "_links": {
+                "self": {
+                  "href": "/api/v3/custom_options/7",
+                  "title": "High"
+                }
+              }
+            },
+            {
+              "_type": "CustomOption",
+              "id": 8,
+              "value": "Low",
+              "_links": {
+                "self": {
+                  "href": "/api/v3/custom_options/8",
+                  "title": "Low"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "customField4": {
+        "type": "[]User",
+        "name": "Reviewers",
+        "required": false,
+        "writable": true,
+        "location": "_links",
+        "_links": {
+          "allowedValues": {
+            "href": "/api/v3/projects/1/available_assignees"
+          }
+        }
+      },
+      "customField5": {
+        "type": "Integer",
+        "name": "Ticket number",
+        "required": false,
+        "writable": true
+      }
+    },
+    "validationErrors": {}
+  },
+  "_links": {
+    "commit": {
+      "href": "/api/v3/work_packages",
+      "method": "post"
+    }
+  }
+}

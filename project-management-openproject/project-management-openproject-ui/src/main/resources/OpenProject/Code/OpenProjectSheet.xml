@@ -59,6 +59,7 @@
             &lt;input id="handle-connection-form-token" type="hidden" name="form_token" value="${escapetool.xml($services.csrf.token)}" /&gt;
             &lt;input id="document-reference" type="hidden" name="document-reference" value=""&gt;
             &lt;input id="connection-action" type="hidden" name="connection-action" value=""&gt;
+            &lt;input id="stored-authentication-type" type="hidden" name="stored-authentication-type" value=""&gt;
             &lt;div class="form-group"&gt;
               &lt;label class="h5" for="connection-name"&gt;
                 &lt;strong&gt;
@@ -76,6 +77,18 @@
               &lt;/label&gt;
               &lt;p class="form-text text-muted"&gt;$escapetool.xml($services.localization.render('openproject.config.serverURLDescription'))&lt;/p&gt;
               &lt;input id="server-url" class="form-control" name="server-url" type="text"&gt;
+            &lt;/div&gt;
+            &lt;div class="form-group"&gt;
+              &lt;label class="h5" for="authentication-type"&gt;
+                &lt;strong&gt;
+                  $escapetool.xml($services.localization.render('openproject.config.authenticationType'))
+                &lt;/strong&gt;
+              &lt;/label&gt;
+              &lt;p class="form-text text-muted"&gt;$escapetool.xml($services.localization.render('openproject.config.authenticationTypeDescription'))&lt;/p&gt;
+              &lt;select id="authentication-type" class="form-control" name="authentication-type"&gt;
+                &lt;option value="oauth"&gt;$escapetool.xml($services.localization.render('openproject.config.authenticationType.oauth'))&lt;/option&gt;
+                &lt;option value="token"&gt;$escapetool.xml($services.localization.render('openproject.config.authenticationType.token'))&lt;/option&gt;
+              &lt;/select&gt;
             &lt;/div&gt;
             &lt;div class="form-group"&gt;
               &lt;label class="h5" for="client-id"&gt;
@@ -96,6 +109,15 @@
               &lt;/label&gt;
               &lt;p class="form-text text-muted"&gt; $escapetool.xml($services.localization.render('openproject.config.clientSecretDescription'))&lt;/p&gt;
               &lt;input id="client-secret" class="form-control" name="client-secret" type="text"&gt;
+            &lt;/div&gt;
+            &lt;div class="form-group"&gt;
+              &lt;label class="h5" for="api-token"&gt;
+                &lt;strong&gt;
+                  $escapetool.xml($services.localization.render('openproject.config.apiToken'))
+                &lt;/strong&gt;
+              &lt;/label&gt;
+              &lt;p class="form-text text-muted"&gt;$escapetool.xml($services.localization.render('openproject.config.apiTokenDescription'))&lt;/p&gt;
+              &lt;input id="api-token" class="form-control" name="api-token" type="password" autocomplete="off"&gt;
             &lt;/div&gt;
           &lt;/div&gt;
           &lt;div class="modal-footer"&gt;
@@ -164,7 +186,7 @@
 
     {{liveData
     id="openproject_connections"
-    properties="connectionName,serverURL,clientId,clientSecret,isAuthorized,actions"
+    properties="connectionName,serverURL,authenticationType,clientId,clientSecret,isAuthorized,actions"
     source="liveTable"
     sourceParameters="translationPrefix=openproject.livedatalabels.&amp;resultPage=OpenProject.Code.OpenProjectSourceJson"
     }}
@@ -200,6 +222,12 @@
           },
           {
             "id": "clientSecret",
+            "displayer": "html",
+            "sortable": false,
+            "filterable": false
+          },
+          {
+            "id": "authenticationType",
             "displayer": "html",
             "sortable": false,
             "filterable": false
@@ -365,11 +393,16 @@ require(["jquery", "xwiki-l10n!openproject.config"], function ($, l10n) {
       const serverURL = $(this).data("server-url");
       const clientId = $(this).data("client-id");
       const clientSecret = $(this).data("client-secret");
+      const authenticationType = $(this).data("authentication-type");
       const documentReference = $(this).data("edit-document-reference");
       $("#connection-name").val(connectionName);
       $("#server-url").val(serverURL.replace(/\\\//g, "/"));
       $("#client-id").val(clientId);
       $("#client-secret").val(clientSecret);
+      $("#authentication-type").val(authenticationType || "oauth");
+      $("#stored-authentication-type").val(authenticationType || "oauth");
+      // The stored API token is never sent to the browser. An empty field means "keep the current one".
+      $("#api-token").val("");
       $("#document-reference").val(documentReference);
       $("#connection-action").val("edit");
     });
@@ -381,6 +414,9 @@ require(["jquery", "xwiki-l10n!openproject.config"], function ($, l10n) {
       $("#server-url").val("");
       $("#client-id").val("");
       $("#client-secret").val("");
+      $("#authentication-type").val("oauth");
+      $("#stored-authentication-type").val("");
+      $("#api-token").val("");
 
       const connectionsSpace = XWiki.Model.resolve(
         "OpenProject.Code.OpenProjectConfigurations",
@@ -452,10 +488,19 @@ require(["jquery", "xwiki-l10n!openproject.config"], function ($, l10n) {
       const serverURL = $("#server-url").val().trim();
       const clientId = $("#client-id").val().trim();
       const clientSecret = $("#client-secret").val().trim();
+      const authenticationType = $("#authentication-type").val();
+      const apiToken = $("#api-token").val().trim();
       const documentReference = $("#document-reference").val();
       const connectionAction = $("#connection-action").val();
 
-      if (!connectionName || !serverURL || !clientId || !clientSecret) {
+      // An API token connection needs a token, an OAuth one needs the client credentials. An empty token means the
+      // stored one is kept, which only works for a connection that already authenticates with a token.
+      const hasStoredToken = $("#stored-authentication-type").val() === "token";
+      const missingCredentials = authenticationType === "token"
+        ? (!apiToken &amp;&amp; !hasStoredToken)
+        : (!clientId || !clientSecret);
+
+      if (!connectionName || !serverURL || missingCredentials) {
         return new XWiki.widgets.Notification(
           l10n.get("fillInAllFields"),
           "error"
@@ -483,6 +528,8 @@ require(["jquery", "xwiki-l10n!openproject.config"], function ($, l10n) {
             serverURL: serverURL,
             clientId: clientId,
             clientSecret: clientSecret,
+            authenticationType: authenticationType,
+            apiToken: apiToken,
           }),
         });
 

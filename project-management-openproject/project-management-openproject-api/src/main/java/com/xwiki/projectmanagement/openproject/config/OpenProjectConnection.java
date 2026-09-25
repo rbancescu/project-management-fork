@@ -39,6 +39,30 @@ public class OpenProjectConnection
 
     private String instanceId;
 
+    private AuthenticationType authenticationType;
+
+    private String apiToken;
+
+    /**
+     * Constructs a new {@link OpenProjectConnection} authenticated through OAuth2.
+     *
+     * @param connectionName the name of the configuration
+     * @param serverURL the URL of the OpenProject server
+     * @param clientId the client ID used for authentication
+     * @param clientSecret the client secret used for authentication
+     * @param instanceId the identifier of the OpenProject instance
+     */
+    public OpenProjectConnection(
+        String connectionName,
+        String serverURL,
+        String clientId,
+        String clientSecret,
+        String instanceId
+    )
+    {
+        this(connectionName, serverURL, clientId, clientSecret, instanceId, AuthenticationType.OAUTH.getValue(), null);
+    }
+
     /**
      * Constructs a new {@link OpenProjectConnection} with the provided values.
      *
@@ -47,6 +71,9 @@ public class OpenProjectConnection
      * @param clientId the client ID used for authentication
      * @param clientSecret the client secret used for authentication
      * @param instanceId the identifier of the OpenProject instance
+     * @param authenticationType the way in which the calls to this instance are authenticated
+     * @param apiToken the API key used when the authentication type is {@link AuthenticationType#TOKEN}
+     * @since 1.3
      */
     @JsonCreator
     public OpenProjectConnection(
@@ -59,7 +86,11 @@ public class OpenProjectConnection
         @JsonProperty("clientSecret")
         String clientSecret,
         @JsonProperty("instanceId")
-        String instanceId
+        String instanceId,
+        @JsonProperty("authenticationType")
+        String authenticationType,
+        @JsonProperty("apiToken")
+        String apiToken
     )
     {
         this.connectionName = connectionName;
@@ -67,6 +98,8 @@ public class OpenProjectConnection
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.instanceId = instanceId;
+        this.authenticationType = AuthenticationType.fromString(authenticationType);
+        this.apiToken = apiToken;
     }
 
     /**
@@ -159,5 +192,45 @@ public class OpenProjectConnection
     public void setInstanceId(String instanceId)
     {
         this.instanceId = instanceId;
+    }
+
+    /**
+     * @return the way in which the calls to this instance are authenticated
+     * @since 1.3
+     */
+    public AuthenticationType getAuthenticationType()
+    {
+        return authenticationType;
+    }
+
+    /**
+     * Sets the way in which the calls to this instance are authenticated.
+     *
+     * @param authenticationType the new authentication type
+     * @since 1.3
+     */
+    public void setAuthenticationType(AuthenticationType authenticationType)
+    {
+        this.authenticationType = authenticationType;
+    }
+
+    /**
+     * @return the API key used when the authentication type is {@link AuthenticationType#TOKEN}
+     * @since 1.3
+     */
+    public String getApiToken()
+    {
+        return apiToken;
+    }
+
+    /**
+     * Sets the API key used when the authentication type is {@link AuthenticationType#TOKEN}.
+     *
+     * @param apiToken the new API key
+     * @since 1.3
+     */
+    public void setApiToken(String apiToken)
+    {
+        this.apiToken = apiToken;
     }
 }

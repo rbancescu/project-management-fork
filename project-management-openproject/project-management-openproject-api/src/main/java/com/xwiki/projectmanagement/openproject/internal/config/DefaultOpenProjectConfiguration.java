@@ -25,7 +25,6 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.xwiki.cache.Cache;
@@ -49,7 +48,8 @@ import com.xwiki.projectmanagement.exception.AuthenticationException;
 import com.xwiki.projectmanagement.model.PaginatedResult;
 import com.xwiki.projectmanagement.openproject.OpenProjectApiClient;
 import com.xwiki.projectmanagement.openproject.OpenProjectApiClientFactory;
-import com.xwiki.projectmanagement.openproject.auth.BearerTokenAuthenticator;
+import com.xwiki.projectmanagement.openproject.auth.OpenProjectAuthenticator;
+import com.xwiki.projectmanagement.openproject.config.AuthenticationType;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConfiguration;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConnection;
 import com.xwiki.projectmanagement.openproject.model.BaseOpenProjectObject;
@@ -159,20 +159,48 @@ public class DefaultOpenProjectConfiguration implements OpenProjectConfiguration
     }
 
     @Override
+    public boolean isAuthenticated(String connectionName)
+    {
+        return resolveAuthenticator(getConnection(connectionName)) != null;
+    }
+
+    @Override
     public OpenProjectApiClient getOpenProjectApiClient(String connectionName)
     {
         OpenProjectConnection connection = getConnection(connectionName);
-        String accessToken = getAccessTokenForConfiguration(connectionName);
-        if (connection == null || StringUtils.isEmpty(accessToken)) {
+        OpenProjectAuthenticator authenticator = resolveAuthenticator(connection);
+        if (authenticator == null) {
             logger.warn(String.format(
                 CLIENT_CONFIGURATION_NOT_EXISTING, connectionName));
             return null;
         }
         return openProjectApiClientFactory.builder()
             .serverUrl(connection.getServerURL())
-            .authentication(new BearerTokenAuthenticator(accessToken))
+            .authentication(authenticator)
 //            .caching(cache, connection.getClientId())
             .build();
+    }
+
+    /**
+     * @param connection the connection for which to build the authentication strategy
+     * @return the authenticator matching the authentication type of the connection, or null when the credentials it
+     *     needs are missing
+     */
+    private OpenProjectAuthenticator resolveAuthenticator(OpenProjectConnection connection)
+    {
+        if (connection == null) {
+            return null;
+        }
+        AuthenticationType authenticationType = connection.getAuthenticationType();
+        String credential = AuthenticationType.TOKEN == authenticationType
+            ? connection.getApiToken()
+            : getAccessTokenForConfiguration(connection.getConnectionName());
+        return isEmpty(credential) ? null : authenticationType.createAuthenticator(credential);
+    }
+
+    private static boolean isEmpty(String value)
+    {
+        return value == null || value.isEmpty();
     }
 
     @Override

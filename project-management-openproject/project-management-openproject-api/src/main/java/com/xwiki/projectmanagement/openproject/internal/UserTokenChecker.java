@@ -45,7 +45,9 @@ import org.xwiki.rendering.listener.reference.ResourceType;
 import org.xwiki.rendering.transformation.MacroTransformationContext;
 
 import com.xpn.xwiki.XWikiContext;
+import com.xwiki.projectmanagement.openproject.config.AuthenticationType;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConfiguration;
+import com.xwiki.projectmanagement.openproject.config.OpenProjectConnection;
 
 /**
  * Responsible with checking if a connection to a given OpenProject instance exists and a token was retrieved.
@@ -84,6 +86,13 @@ public class UserTokenChecker
         XWikiContext xContext = contextProvider.get();
         String viewAction = "view";
         String connectionName = instance;
+
+        OpenProjectConnection connection = openProjectConfiguration.getConnection(connectionName);
+        if (connection != null && AuthenticationType.TOKEN == connection.getAuthenticationType()) {
+            // The connection authenticates with its own API key, so there is nothing for the current user to
+            // authorize. Any missing or invalid key is a configuration problem, reported by the admin section.
+            return Collections.emptyList();
+        }
 
         if (xContext.getUserReference() == null
             || openProjectConfiguration.getAccessTokenForConfiguration(connectionName) == null)

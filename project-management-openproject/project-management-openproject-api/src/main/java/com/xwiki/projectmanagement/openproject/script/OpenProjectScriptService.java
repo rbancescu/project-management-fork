@@ -145,8 +145,7 @@ public class OpenProjectScriptService implements ScriptService
      */
     public boolean isUserAuthorized(String instanceName)
     {
-        String accessToken = openProjectConfiguration.getAccessTokenForConfiguration(instanceName);
-        return accessToken != null;
+        return openProjectConfiguration.isAuthenticated(instanceName);
     }
 
     /**

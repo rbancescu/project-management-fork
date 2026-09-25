@@ -90,10 +90,17 @@
     #set ($serverURL = $escapetool.xml($result.get("serverURL")))
     #set ($clientId = $escapetool.xml($result.get("clientId")))
     #set ($clientSecret = $escapetool.xml($result.get("clientSecret")))
+    #set ($authenticationType = $escapetool.xml($result.get("authenticationType")))
+    #if ("$!authenticationType" == '')
+      #set ($authenticationType = 'oauth')
+    #end
     #set ($connectionNameHtml = "&lt;span class='text-muted'&gt;$connectionName&lt;/span&gt;")
     #set ($serverURLHtml = "&lt;a href='$serverURL' target='_blank'&gt;$!result.get('serverURL')&lt;/a&gt;")
     #set ($clientIdHtml = "&lt;span class='text-primary'&gt;$clientId&lt;/span&gt;")
     #set ($clientSecretHtml = "&lt;span class='text-primary h1'&gt;••••••••&lt;/span&gt;")
+    #set ($authenticationTypeLabel = $services.localization.render(
+      "openproject.config.authenticationType.${authenticationType}"))
+    #set ($authenticationTypeHtml = "&lt;span class='text-primary'&gt;$authenticationTypeLabel&lt;/span&gt;")
     #set ($isAuthorizedToOP = $services.openproject.isUserAuthorized($connectionName))
     #set ($authLink = $xwiki.getURL('OpenProject.Code.RenewOAuthConnection', 'view', $escapetool.url({
         'connectionName': $connectionName,
@@ -107,6 +114,7 @@
       data-server-url=$serverURL
       data-client-id=$clientId
       data-client-secret=$clientSecret
+      data-authentication-type='$authenticationType'
       data-edit-document-reference=$documentReference
     &gt;$services.icon.renderHTML('pencil')&lt;/span&gt;&lt;/a&gt;&lt;a
       class='delete-button action'
@@ -115,18 +123,20 @@
       data-connection-name=$connectionName
       data-delete-document-reference=$documentReference
     &gt;$services.icon.renderHTML('trash')&lt;/span&gt;&lt;/a&gt;")
-    #if (!$isAuthorizedToOP)
+    #if (!$isAuthorizedToOP &amp;&amp; $authenticationType != 'token')
       #set ($actionsHTML = "${actionsHTML}&lt;a
       class='op-auth-button action'
       name='authorize-connection'
       href=$authLink
-    &gt;$services.icon.renderHTML('unlock')&lt;/a&gt;&lt;/div&gt;")
+    &gt;$services.icon.renderHTML('unlock')&lt;/a&gt;")
     #end
+    #set ($actionsHTML = "${actionsHTML}&lt;/div&gt;")
     #set($discard = $json.rows.add({
       "connectionName" : $connectionNameHtml,
       "serverURL" : $serverURLHtml,
       "clientId" : $clientIdHtml,
       "clientSecret" : $clientSecretHtml,
+      "authenticationType" : $authenticationTypeHtml,
       "isAuthorized": $services.localization.render("openproject.config.isAuthorized.${isAuthorizedToOP}"),
       "actions" : $actionsHTML
         }))

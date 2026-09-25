@@ -27,6 +27,7 @@ import javax.inject.Named;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
@@ -46,6 +47,7 @@ import com.xpn.xwiki.objects.BaseObject;
 import com.xwiki.projectmanagement.exception.ProjectManagementException;
 import com.xwiki.projectmanagement.openproject.OpenProjectApiClientFactory;
 import com.xwiki.projectmanagement.openproject.auth.NoOpAuthenticator;
+import com.xwiki.projectmanagement.openproject.config.AuthenticationType;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConnection;
 
 /**
@@ -66,6 +68,10 @@ public class HandleConnectionsService
     private static final String CLIENT_SECRET = "clientSecret";
 
     private static final String INSTANCE_ID = "instanceId";
+
+    private static final String AUTHENTICATION_TYPE = "authenticationType";
+
+    private static final String API_TOKEN = "apiToken";
 
     private static final String OPEN_PROJECT = "OpenProject";
 
@@ -157,9 +163,35 @@ public class HandleConnectionsService
         configObj.setStringValue(CLIENT_ID, openProjectConnection.getClientId());
         configObj.setStringValue(CLIENT_SECRET, openProjectConnection.getClientSecret());
         configObj.setStringValue(INSTANCE_ID, retrieveInstanceId(openProjectConnection.getServerURL()));
+        AuthenticationType authenticationType = openProjectConnection.getAuthenticationType() == null
+            ? AuthenticationType.OAUTH : openProjectConnection.getAuthenticationType();
+        configObj.setStringValue(AUTHENTICATION_TYPE, authenticationType.getValue());
+        // The stored API token is never sent back to the admin UI, so an empty incoming token means "keep the one
+        // that is already configured".
+        if (StringUtils.isNotBlank(openProjectConnection.getApiToken())) {
+            configObj.setStringValue(API_TOKEN, openProjectConnection.getApiToken());
+        }
 
+        handleOidcObject(openProjectConnection, authenticationType, doc, wikiName, context);
+
+        context.getWiki().saveDocument(doc, "Saved OpenProject and OIDC config via REST", context);
+    }
+
+    private void handleOidcObject(OpenProjectConnection openProjectConnection, AuthenticationType authenticationType,
+        XWikiDocument doc, String wikiName, XWikiContext context) throws XWikiException
+    {
         DocumentReference oidcClassRef =
             new DocumentReference(wikiName, Arrays.asList("XWiki", "OIDC"), "ClientConfigurationClass");
+
+        if (AuthenticationType.TOKEN == authenticationType) {
+            // There is no OAuth2 flow to configure when the connection authenticates with an API key. Drop any client
+            // configuration left over from a previous OAuth2 setup so that a broken OAuth2 client is not registered.
+            BaseObject oidcObj = doc.getXObject(oidcClassRef);
+            if (oidcObj != null) {
+                doc.removeXObject(oidcObj);
+            }
+            return;
+        }
 
         BaseObject oidcObj = doc.getXObject(oidcClassRef, true, context);
         oidcObj.setStringValue("configurationName", openProjectConnection.getConnectionName());
@@ -173,8 +205,6 @@ public class HandleConnectionsService
         oidcObj.setStringValue("responseType", "code");
         oidcObj.setIntValue("enableUser", 1);
         oidcObj.setStringValue("tokenStorageScope", "USER");
-
-        context.getWiki().saveDocument(doc, "Saved OpenProject and OIDC config via REST", context);
     }
 
     private String retrieveInstanceId(String serverURL)

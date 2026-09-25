@@ -20,6 +20,8 @@
 
 package com.xwiki.projectmanagement.openproject.model;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -58,6 +60,8 @@ public class CreateWorkPackage
     private Integer lockVersion;
 
     private Boolean formOnly;
+
+    private Map<String, Object> customFields;
 
     /**
      * Default constructor.
@@ -360,5 +364,24 @@ public class CreateWorkPackage
     public void setFormOnly(Boolean formOnly)
     {
         this.formOnly = formOnly;
+    }
+
+    /**
+     * @return the custom field values, keyed by OpenProject attribute name ({@code customField12}) or by the custom
+     *     field display name. Link-based fields (list, user, version) take an href or a list of hrefs.
+     * @since 1.3
+     */
+    public Map<String, Object> getCustomFields()
+    {
+        return customFields;
+    }
+
+    /**
+     * @param customFields see {@link #getCustomFields()}
+     * @since 1.3
+     */
+    public void setCustomFields(Map<String, Object> customFields)
+    {
+        this.customFields = customFields;
     }
 }

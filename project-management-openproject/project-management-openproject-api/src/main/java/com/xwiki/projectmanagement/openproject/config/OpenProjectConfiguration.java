@@ -59,6 +59,20 @@ public interface OpenProjectConfiguration
     String getAccessTokenForConfiguration(String connectionName);
 
     /**
+     * Checks whether the calls made through a given connection can currently be authenticated. Depending on the
+     * {@link AuthenticationType} of the connection, this means either that the current user has a valid OAuth2 access
+     * token or that an API key was configured on the connection.
+     *
+     * @param connectionName the name of the OpenProject connection configuration
+     * @return {@code true} if a client can be built for the given connection, {@code false} otherwise
+     * @since 1.3
+     */
+    default boolean isAuthenticated(String connectionName)
+    {
+        return getAccessTokenForConfiguration(connectionName) != null;
+    }
+
+    /**
      * Creates a new OAuth token using the specified connection name and redirect URL.
      *
      * @param connectionName the name of the connection to use for creating the OAuth token

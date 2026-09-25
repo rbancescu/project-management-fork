@@ -87,6 +87,11 @@ public class OpenProjectTestUtils
         return getJsonFromResource("openProjectCreateWorkPackageValidationSuccessResponse.json");
     }
 
+    public static String getCreateWorkPackageCustomFieldsFormResponse() throws IOException
+    {
+        return getJsonFromResource("openProjectCreateWorkPackageCustomFieldsFormResponse.json");
+    }
+
     private static String getJsonFromResource(String fileName) throws IOException
     {
         InputStream stream = OpenProjectTestUtils.class.getClassLoader().getResourceAsStream(fileName);

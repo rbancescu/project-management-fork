@@ -21,6 +21,7 @@
 package com.xwiki.projectmanagement.openproject.internal.rest.workPackages;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -51,6 +52,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -199,6 +202,119 @@ public class HandleWorkPackagesTest
             ProjectManagementException.class,
             () -> this.handleWorkPackages.createWorkPackage(WIKI, INSTANCE, new CreateWorkPackage())
         );
+    }
+
+    @Test
+    public void createWorkPackageWithCustomFieldsTest() throws ProjectManagementException, IOException
+    {
+        JsonNode formResponse = this.mapper.readTree(
+            OpenProjectTestUtils.getCreateWorkPackageCustomFieldsFormResponse());
+        when(this.openProjectApiClient.getWorkPackagesFormResponse(anyString())).thenReturn(formResponse);
+
+        Map<String, Object> customFields = new LinkedHashMap<>();
+        customFields.put("customField1", "ACME");
+        customFields.put("notes", "Some *long* text");
+        customFields.put("Severity", "/api/v3/custom_options/7");
+        customFields.put("customField4", List.of("/api/v3/users/1", "/api/v3/users/2"));
+        customFields.put("customField5", 42);
+        customFields.put("Unknown field", "ignored");
+        CreateWorkPackage workPackage = new CreateWorkPackage();
+        workPackage.setProject("/api/v3/projects/1");
+        workPackage.setSubject("subject");
+        workPackage.setType("/api/v3/types/2");
+        workPackage.setCustomFields(customFields);
+
+        Response response = this.handleWorkPackages.createWorkPackage(WIKI, INSTANCE, workPackage);
+
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        ArgumentCaptor<String> requestCaptor = ArgumentCaptor.forClass(String.class);
+        verify(this.openProjectApiClient, times(2)).getWorkPackagesFormResponse(requestCaptor.capture());
+        verify(this.openProjectApiClient).createWorkPackage(anyString(), anyString());
+
+        JsonNode firstRequest = this.mapper.readTree(requestCaptor.getAllValues().get(0));
+        assertEquals(false, firstRequest.has("customField1"));
+
+        JsonNode expectedRequest = this.mapper.readTree("{"
+            + "\"subject\":\"subject\","
+            + "\"customField1\":\"ACME\","
+            + "\"customField2\":{\"raw\":\"Some *long* text\"},"
+            + "\"customField5\":42,"
+            + "\"_links\":{"
+            + "\"project\":{\"href\":\"/api/v3/projects/1\"},"
+            + "\"type\":{\"href\":\"/api/v3/types/2\"},"
+            + "\"customField3\":{\"href\":\"/api/v3/custom_options/7\"},"
+            + "\"customField4\":[{\"href\":\"/api/v3/users/1\"},{\"href\":\"/api/v3/users/2\"}]"
+            + "}}");
+        assertEquals(expectedRequest, this.mapper.readTree(requestCaptor.getAllValues().get(1)));
+    }
+
+    @Test
+    public void createWorkPackageWithCustomFieldsSendsTheDefaultTypeTest()
+        throws ProjectManagementException, IOException
+    {
+        JsonNode formResponse = this.mapper.readTree(
+            OpenProjectTestUtils.getCreateWorkPackageCustomFieldsFormResponse());
+        when(this.openProjectApiClient.getWorkPackagesFormResponse(anyString())).thenReturn(formResponse);
+
+        CreateWorkPackage workPackage = new CreateWorkPackage();
+        workPackage.setProject("/api/v3/projects/1");
+        workPackage.setCustomFields(Map.of("customField1", "ACME"));
+
+        this.handleWorkPackages.createWorkPackage(WIKI, INSTANCE, workPackage);
+
+        ArgumentCaptor<String> requestCaptor = ArgumentCaptor.forClass(String.class);
+        verify(this.openProjectApiClient, times(2)).getWorkPackagesFormResponse(requestCaptor.capture());
+        JsonNode secondRequest = this.mapper.readTree(requestCaptor.getAllValues().get(1));
+        assertEquals("/api/v3/types/1", secondRequest.path("_links").path("type").path("href").asText());
+    }
+
+    @Test
+    public void createWorkPackageWithOnlyUnknownCustomFieldsRequestsTheFormOnceTest()
+        throws ProjectManagementException, IOException
+    {
+        JsonNode formResponse = this.mapper.readTree(
+            OpenProjectTestUtils.getCreateWorkPackageCustomFieldsFormResponse());
+        when(this.openProjectApiClient.getWorkPackagesFormResponse(anyString())).thenReturn(formResponse);
+
+        CreateWorkPackage workPackage = new CreateWorkPackage();
+        workPackage.setCustomFields(Map.of("Unknown field", "ignored"));
+
+        Response response = this.handleWorkPackages.createWorkPackage(WIKI, INSTANCE, workPackage);
+
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        verify(this.openProjectApiClient, times(1)).getWorkPackagesFormResponse(anyString());
+    }
+
+    @Test
+    public void createWorkPackageFormOnlyDescribesCustomFieldsTest() throws ProjectManagementException, IOException
+    {
+        JsonNode formResponse = this.mapper.readTree(
+            OpenProjectTestUtils.getCreateWorkPackageCustomFieldsFormResponse());
+        when(this.openProjectApiClient.getWorkPackagesFormResponse(anyString())).thenReturn(formResponse);
+
+        CreateWorkPackage workPackage = new CreateWorkPackage();
+        workPackage.setFormOnly(true);
+
+        Response response = this.handleWorkPackages.createWorkPackage(WIKI, INSTANCE, workPackage);
+
+        verify(this.openProjectApiClient, never()).createWorkPackage(anyString(), anyString());
+        JsonNode customFields = this.mapper.valueToTree(response.getEntity()).path("customFields");
+        JsonNode expected = this.mapper.readTree("{"
+            + "\"customField1\":{\"name\":\"Customer\",\"type\":\"String\",\"required\":true,"
+            + "\"writable\":true,\"multiValue\":false,\"defaultValue\":null},"
+            + "\"customField2\":{\"name\":\"Notes\",\"type\":\"Formattable\",\"required\":false,"
+            + "\"writable\":true,\"multiValue\":false,\"defaultValue\":null},"
+            + "\"customField3\":{\"name\":\"Severity\",\"type\":\"CustomOption\",\"required\":false,"
+            + "\"writable\":true,\"multiValue\":false,\"allowedValues\":["
+            + "{\"value\":\"/api/v3/custom_options/7\",\"label\":\"High\"},"
+            + "{\"value\":\"/api/v3/custom_options/8\",\"label\":\"Low\"}],\"defaultValue\":null},"
+            + "\"customField4\":{\"name\":\"Reviewers\",\"type\":\"[]User\",\"required\":false,"
+            + "\"writable\":true,\"multiValue\":true,"
+            + "\"allowedValuesHref\":\"/api/v3/projects/1/available_assignees\",\"defaultValue\":null},"
+            + "\"customField5\":{\"name\":\"Ticket number\",\"type\":\"Integer\",\"required\":false,"
+            + "\"writable\":true,\"multiValue\":false,\"defaultValue\":null}"
+            + "}");
+        assertEquals(expected, customFields);
     }
 
     private List<Project> generateProjects()

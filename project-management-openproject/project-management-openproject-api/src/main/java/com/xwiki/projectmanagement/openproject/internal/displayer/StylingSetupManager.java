@@ -29,7 +29,6 @@ import javax.inject.Named;
 import javax.inject.Provider;
 import javax.inject.Singleton;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,8 +50,6 @@ import com.xpn.xwiki.doc.XWikiDocument;
 import com.xpn.xwiki.objects.BaseObject;
 import com.xwiki.projectmanagement.exception.ProjectManagementException;
 import com.xwiki.projectmanagement.openproject.OpenProjectApiClient;
-import com.xwiki.projectmanagement.openproject.OpenProjectApiClientFactory;
-import com.xwiki.projectmanagement.openproject.auth.BearerTokenAuthenticator;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConfiguration;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConnection;
 import com.xwiki.projectmanagement.openproject.model.Status;
@@ -92,9 +89,6 @@ public class StylingSetupManager
 
     @Inject
     private OpenProjectConfiguration opConfiguration;
-
-    @Inject
-    private OpenProjectApiClientFactory openProjectApiClientFactory;
 
     @Inject
     private DocumentReferenceResolver<EntityReference> documentReferenceResolver;
@@ -147,17 +141,12 @@ public class StylingSetupManager
                 new EntityReference(openProjCfgName, EntityType.DOCUMENT, OPEN_PROJECT_SSX_EXTENSIONS.getParent()));
             LOGGER.debug("Generating style for instance [{}] at document [{}].", openProjCfgName, stylesDocRef);
             try {
-                OpenProjectConnection connection = opConfiguration.getConnection(openProjCfgName);
-                String accessToken = opConfiguration.getAccessTokenForConfiguration(openProjCfgName);
-                if (connection == null || StringUtils.isEmpty(accessToken)) {
+                OpenProjectApiClient apiClient = opConfiguration.getOpenProjectApiClient(openProjCfgName);
+                if (apiClient == null) {
                     LOGGER.warn("Skipping styling update for [{}] due to missing configuration or access token.",
                         openProjCfgName);
                     continue;
                 }
-                OpenProjectApiClient apiClient = openProjectApiClientFactory.builder()
-                    .serverUrl(connection.getServerURL())
-                    .authentication(new BearerTokenAuthenticator(accessToken))
-                    .build();
 
                 StringBuilder stringBuilder = new StringBuilder();
 

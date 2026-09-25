@@ -21,6 +21,7 @@ package com.xwiki.projectmanagement.openproject.internal.config;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.util.Base64;
 import java.util.List;
 
 import javax.inject.Named;
@@ -53,17 +54,22 @@ import com.xwiki.projectmanagement.openproject.OpenProjectApiClient;
 import com.xwiki.projectmanagement.openproject.OpenProjectApiClientBuilder;
 import com.xwiki.projectmanagement.openproject.OpenProjectApiClientFactory;
 import com.xwiki.projectmanagement.openproject.auth.OpenProjectAuthenticator;
+import com.xwiki.projectmanagement.openproject.config.AuthenticationType;
 import com.xwiki.projectmanagement.openproject.config.OpenProjectConnection;
 import com.xwiki.projectmanagement.openproject.model.BaseOpenProjectObject;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -114,6 +120,28 @@ public class DefaultOpenProjectConfigurationTest
         "firstInstanceId"
     );
 
+    private static final String API_TOKEN = "apiToken";
+
+    private static final OpenProjectConnection tokenConnection = new OpenProjectConnection(
+        "tokenConnection",
+        "tokenConnectionURL",
+        "",
+        "",
+        "firstInstanceId",
+        "token",
+        API_TOKEN
+    );
+
+    private static final OpenProjectConnection tokenConnectionWithoutToken = new OpenProjectConnection(
+        "tokenConnectionWithoutToken",
+        "tokenConnectionWithoutTokenURL",
+        "",
+        "",
+        "firstInstanceId",
+        "token",
+        ""
+    );
+
     private static final String GET_OPEN_PROJECT_CLIENT_ERROR_MESSAGE =
         "No client for connection [%s] could be created because the configuration doesn't exist or the access "
             + "token for the current user is not set.";
@@ -137,7 +165,9 @@ public class DefaultOpenProjectConfigurationTest
                 "thirdConnectionClientId",
                 "thirdConnectionClientSecret",
                 "firstInstanceId"
-            )
+            ),
+            tokenConnection,
+            tokenConnectionWithoutToken
         );
 
         ReflectionUtils.setFieldValue(this.configuration, "logger", this.logger);
@@ -256,6 +286,64 @@ public class DefaultOpenProjectConfigurationTest
         authCaptor.getValue().authenticate(requestBuilder);
         assertEquals("Bearer " + ACCESS_TOKEN,
             requestBuilder.build().headers().firstValue("Authorization").orElse(null));
+    }
+
+    @Test
+    public void getOpenProjectApiClientWithApiTokenTest() throws OAuth2Exception
+    {
+        when(openProjectApiClientFactory.builder()).thenReturn(builder);
+        when(builder.serverUrl(any())).thenReturn(builder);
+        when(builder.authentication(any())).thenReturn(builder);
+        when(builder.build()).thenReturn(apiClient);
+
+        OpenProjectApiClient client = configuration.getOpenProjectApiClient(tokenConnection.getConnectionName());
+
+        assertSame(apiClient, client);
+
+        verify(builder).serverUrl(tokenConnection.getServerURL());
+        // The OAuth2 client is never asked for a token when the connection authenticates with an API key.
+        verify(oauth2Client, never()).getAccessToken(tokenConnection.getConnectionName());
+
+        ArgumentCaptor<OpenProjectAuthenticator> authCaptor = ArgumentCaptor.forClass(OpenProjectAuthenticator.class);
+        verify(builder).authentication(authCaptor.capture());
+
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create("http://localhost"));
+        authCaptor.getValue().authenticate(requestBuilder);
+        assertEquals("Basic " + Base64.getEncoder().encodeToString(("apikey:" + API_TOKEN).getBytes(UTF_8)),
+            requestBuilder.build().headers().firstValue("Authorization").orElse(null));
+    }
+
+    @Test
+    public void getOpenProjectApiClientApiTokenIsEmptyTest()
+    {
+        OpenProjectApiClient client =
+            configuration.getOpenProjectApiClient(tokenConnectionWithoutToken.getConnectionName());
+
+        assertNull(client);
+
+        verify(logger).warn(String.format(
+            GET_OPEN_PROJECT_CLIENT_ERROR_MESSAGE, tokenConnectionWithoutToken.getConnectionName()));
+    }
+
+    @Test
+    public void unknownAuthenticationTypeFallsBackToOAuthTest()
+    {
+        // Connections configured before the authentication type existed have no value stored for it.
+        assertEquals(AuthenticationType.OAUTH, opConnection.getAuthenticationType());
+        assertEquals(AuthenticationType.OAUTH,
+            new OpenProjectConnection("c", "u", "i", "s", "iid", "somethingElse", null).getAuthenticationType());
+    }
+
+    @Test
+    public void isAuthenticatedTest() throws OAuth2Exception
+    {
+        assertTrue(configuration.isAuthenticated(opConnection.getConnectionName()));
+        assertTrue(configuration.isAuthenticated(tokenConnection.getConnectionName()));
+        assertFalse(configuration.isAuthenticated(tokenConnectionWithoutToken.getConnectionName()));
+        assertFalse(configuration.isAuthenticated("invalidConnection"));
+
+        when(oauth2Client.getAccessToken(opConnection.getConnectionName())).thenReturn(null);
+        assertFalse(configuration.isAuthenticated(opConnection.getConnectionName()));
     }
 
     @Test

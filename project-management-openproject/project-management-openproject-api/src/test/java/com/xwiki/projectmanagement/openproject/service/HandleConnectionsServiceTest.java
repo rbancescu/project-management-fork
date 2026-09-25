@@ -57,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -191,6 +192,7 @@ public class HandleConnectionsServiceTest
         assertEquals(openProjectConnection.getClientId(), configObj.getStringValue("clientId"));
         assertEquals(openProjectConnection.getClientSecret(), configObj.getStringValue("clientSecret"));
         assertEquals("instanceId", configObj.getStringValue("instanceId"));
+        assertEquals("oauth", configObj.getStringValue("authenticationType"));
 
         assertEquals(openProjectConnection.getConnectionName(), oidcObj.getStringValue("configurationName"));
         assertEquals(
@@ -211,5 +213,78 @@ public class HandleConnectionsServiceTest
         assertEquals("USER", oidcObj.getStringValue("tokenStorageScope"));
 
         verify(xwiki).saveDocument(doc, "Saved OpenProject and OIDC config via REST", xContext);
+    }
+
+    @Test
+    public void handleTokenConnectionTest() throws QueryException, ProjectManagementException, XWikiException
+    {
+        BaseObject configObj = new BaseObject();
+        BaseObject existingOidcObj = new BaseObject();
+
+        DocumentReference configClassRef = new DocumentReference(
+            WIKI_NAME,
+            Arrays.asList("OpenProject", "Code"),
+            "OpenProjectConnectionClass"
+        );
+
+        DocumentReference oidcClassRef = new DocumentReference(
+            WIKI_NAME,
+            Arrays.asList("XWiki", "OIDC"),
+            "ClientConfigurationClass"
+        );
+
+        when(doc.getXObject(eq(configClassRef), eq(true), eq(xContext))).thenReturn(configObj);
+        when(doc.getXObject(eq(oidcClassRef))).thenReturn(existingOidcObj);
+        when(this.query.execute()).thenReturn(List.of());
+
+        when(this.openProjectApiClientFactory.builder()).thenReturn(this.openProjectApiClientBuilder);
+        when(this.openProjectApiClientBuilder.serverUrl(any())).thenReturn(this.openProjectApiClientBuilder);
+        when(this.openProjectApiClientBuilder.authentication(any())).thenReturn(this.openProjectApiClientBuilder);
+        when(this.openProjectApiClientBuilder.build()).thenReturn(this.openProjectApiClient);
+        when(this.openProjectApiClient.getInstanceId()).thenReturn("instanceId");
+
+        OpenProjectConnection tokenConnection = new OpenProjectConnection("connectionName", "serverUrl", "", "",
+            "instanceId", "token", "someApiToken");
+
+        handleConnectionsService.handleConnection(tokenConnection, documentReference);
+
+        assertEquals("token", configObj.getStringValue("authenticationType"));
+        assertEquals("someApiToken", configObj.getStringValue("apiToken"));
+
+        // No OAuth2 client configuration is registered, and a leftover one is removed.
+        verify(doc, never()).getXObject(eq(oidcClassRef), eq(true), eq(xContext));
+        verify(doc).removeXObject(existingOidcObj);
+
+        verify(xwiki).saveDocument(doc, "Saved OpenProject and OIDC config via REST", xContext);
+    }
+
+    @Test
+    public void handleTokenConnectionWithEmptyTokenKeepsStoredOneTest()
+        throws QueryException, ProjectManagementException, XWikiException
+    {
+        BaseObject configObj = new BaseObject();
+        configObj.setStringValue("apiToken", "alreadyStoredToken");
+
+        DocumentReference configClassRef = new DocumentReference(
+            WIKI_NAME,
+            Arrays.asList("OpenProject", "Code"),
+            "OpenProjectConnectionClass"
+        );
+
+        when(doc.getXObject(eq(configClassRef), eq(true), eq(xContext))).thenReturn(configObj);
+        when(this.query.execute()).thenReturn(List.of());
+
+        when(this.openProjectApiClientFactory.builder()).thenReturn(this.openProjectApiClientBuilder);
+        when(this.openProjectApiClientBuilder.serverUrl(any())).thenReturn(this.openProjectApiClientBuilder);
+        when(this.openProjectApiClientBuilder.authentication(any())).thenReturn(this.openProjectApiClientBuilder);
+        when(this.openProjectApiClientBuilder.build()).thenReturn(this.openProjectApiClient);
+        when(this.openProjectApiClient.getInstanceId()).thenReturn("instanceId");
+
+        OpenProjectConnection tokenConnection = new OpenProjectConnection("connectionName", "serverUrl", "", "",
+            "instanceId", "token", "");
+
+        handleConnectionsService.handleConnection(tokenConnection, documentReference);
+
+        assertEquals("alreadyStoredToken", configObj.getStringValue("apiToken"));
     }
 }

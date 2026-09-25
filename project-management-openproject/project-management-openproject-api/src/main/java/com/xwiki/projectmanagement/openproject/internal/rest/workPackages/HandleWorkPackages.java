@@ -159,6 +159,8 @@ public class HandleWorkPackages extends XWikiResource
 
     private static final String WRITABLE = "writable";
 
+    private static final String CUSTOM_FIELDS = "customFields";
+
     @Inject
     private OpenProjectConfiguration openProjectConfiguration;
 
@@ -306,9 +308,7 @@ public class HandleWorkPackages extends XWikiResource
 
         JsonNode response;
         try {
-            response = apiClient.getWorkPackagesFormResponse(objectMapper.writeValueAsString(formRequest));
-
-            validateResponseType(response);
+            response = requestForm(apiClient, null, formRequest, workPackage.getCustomFields());
 
             JsonNode schemaNode = getSchemaNode(response);
 
@@ -411,9 +411,7 @@ public class HandleWorkPackages extends XWikiResource
 
         try {
             JsonNode response =
-                apiClient.getWorkPackageFormResponse(workPackageId, objectMapper.writeValueAsString(formRequest));
-
-            validateResponseType(response);
+                requestForm(apiClient, workPackageId, formRequest, workPackage.getCustomFields());
 
             JsonNode validationErrors = response.path(EMBEDDED).path(VALIDATION_ERRORS);
 
@@ -437,6 +435,51 @@ public class HandleWorkPackages extends XWikiResource
         } catch (JsonProcessingException | ProjectManagementException e) {
             throw new ProjectManagementException("The Work Package update failed", e);
         }
+    }
+
+    /**
+     * Requests a work package form. OpenProject only reveals which custom fields apply, and in what format, through
+     * the schema of a form for the chosen project and type, so when custom fields are given the form is requested a
+     * second time with their values added, letting OpenProject validate them like any other field.
+     *
+     * @param workPackageId the id of the work package being edited, or {@code null} for a creation form
+     */
+    private JsonNode requestForm(OpenProjectApiClient apiClient, String workPackageId,
+        Map<String, Object> formRequest, Map<String, Object> customFields)
+        throws ProjectManagementException, JsonProcessingException
+    {
+        JsonNode response = sendFormRequest(apiClient, workPackageId, formRequest);
+
+        if (WorkPackageCustomFields.apply(formRequest, customFields, getSchemaNode(response))) {
+            setTypeFromForm(formRequest, response);
+            response = sendFormRequest(apiClient, workPackageId, formRequest);
+        }
+        return response;
+    }
+
+    /**
+     * OpenProject silently drops custom field values when the request leaves the type to the project default, even
+     * though the form schema lists that type's custom fields. Sending the type the form settled on keeps them.
+     */
+    @SuppressWarnings("unchecked")
+    private void setTypeFromForm(Map<String, Object> formRequest, JsonNode formResponse)
+    {
+        Map<String, Object> links = (Map<String, Object>) formRequest.get(LINKS);
+        JsonNode typeHref = formResponse.path(EMBEDDED).path(PAYLOAD).path(LINKS).path(TYPE).path(HREF);
+        if (!links.containsKey(TYPE) && typeHref.isTextual()) {
+            links.put(TYPE, Map.of(HREF, typeHref.asText()));
+        }
+    }
+
+    private JsonNode sendFormRequest(OpenProjectApiClient apiClient, String workPackageId,
+        Map<String, Object> formRequest) throws ProjectManagementException, JsonProcessingException
+    {
+        String body = objectMapper.writeValueAsString(formRequest);
+        JsonNode response = workPackageId == null
+            ? apiClient.getWorkPackagesFormResponse(body)
+            : apiClient.getWorkPackageFormResponse(workPackageId, body);
+        validateResponseType(response);
+        return response;
     }
 
     private void validateResponseType(JsonNode response) throws ProjectManagementException
@@ -476,6 +519,7 @@ public class HandleWorkPackages extends XWikiResource
         putSelectField(optionsResponse, schemaNode, payloadNode, STATUS, buildStatuses(schemaNode));
         setAssigneeOptions(schemaNode, payloadNode, optionsResponse);
         putDateFields(optionsResponse, schemaNode, payloadNode);
+        optionsResponse.put(CUSTOM_FIELDS, WorkPackageCustomFields.describe(schemaNode, payloadNode));
 
         addCurrentValueMetadata(payloadNode, optionsResponse);
 
